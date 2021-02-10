@@ -3,11 +3,11 @@ import network
 import imgloader
 
 n = network.Network([28*28, 30, 10])
-data = imgloader.load_data("tri", "trl", 10000)
+data = imgloader.load_data("trainimages", "trainlabels", 10000)
 
 n.learn(data, 0.05, 100, progress_report=True)
 
-test_data = imgloader.load_data("t10i", "t10l", 100)
+test_data = imgloader.load_data("test10Kimages", "test10Klabels", 100)
 n.test_against(test_data)
 """print("weights: ")
 print(n._weights)
