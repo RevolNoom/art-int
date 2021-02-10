@@ -1,4 +1,5 @@
 import numpy
+import copy
 import random
 
 """
@@ -27,8 +28,8 @@ def sigmoid(neuron_input):
 def sigmoid_deriv(neuron_input):
     """sigmoid_deriv(neuron_input)
         The derivative of default sigmoid function"""
-    ez = numpy.exp(-neuron_input)
-    return ez / (1.0 + ez)**2
+    sm = sigmoid(neuron_input)
+    return sm * (1 - sm) 
        
 
 
@@ -67,30 +68,23 @@ class Network:
                 *) z is a numpy array - the input of each neuron in a layer
                 *) Default to 1/(1+e^(-z)) and its derivative e^(-z)/(1+e^(-z))^2"""
 
-        self._layers = len(network_shape)
-        self._neurons_of_layer = network_shape
-        # _biases[L][i] returns the bias value of neuron 'n' in layer 'L' (n and L are 0-based)
-        # Randomize the initial value for fun
-        #self._biases = numpy.array([[random.random() for i in range(network_shape[L])]
-        #                                                for L in range(len(network_shape))])
-        self._biases = [numpy.array([random.random() for i in range(network_shape[layer])]) for layer in range(len(network_shape))]
+        self._shape = network_shape
+        # _biases[L][n] returns the bias value of neuron 'n' in layer 'L' (n and L are 0-based)
+        # randn(shape): Create an array with specified shape, filled with random numbers from Gaussian distribution 
+        self._biases = [numpy.random.randn(layer) for layer in self._shape]
 
         # _weights[L][n2][n1] returns the weight between neuron n2 (in layer L+1) and n1 (in layer L) 
         # No, [n2][n1] wasn't a typo
-        #self._weights= numpy.array([[[random.random() for n1 in range(network_shape[L])] 
-        #                                               for n2 in range(network_shape[L+1])] 
-        #                                                    for L in range(len(network_shape)-1)])
-        self._weights= [numpy.array([[random.random() for n2 in range(network_shape[L+1])] 
-                                                       for n1 in range(network_shape[L])])
-                                                            for L in range(len(network_shape)-1)]
+        self._weights= [numpy.random.randn(self._shape[layer+1], self._shape[layer])
+                                                            for layer in range(len(self._shape)-1)]
 
 
         
         # The neurons input & activation from the last image feeding
         # Used for learning and accuracy-testing processes
         # None is activated at the beginning
-        self._activation= [numpy.array(numpy.zeros(network_shape[layer])) for layer in range(len(network_shape))]
-        self._input     = [numpy.array(numpy.zeros(network_shape[layer])) for layer in range(len(network_shape))]
+        self._activation= [numpy.zeros(self._shape[layer]) for layer in range(len(self._shape))]
+        self._input     = copy.deepcopy(self._activation)
 
         # All the 'd' prefixes are for "derived"
         self._cost   = cost_function[0]
@@ -99,68 +93,79 @@ class Network:
         self._sigmoid   = sigmoid_function[0]
         self._dsigmoid  = sigmoid_function[1]
 
+
     def feed_forward(self, image):
         """
         """
         # Everyone should always be cautious with their data
-        if (len(self._activation[0]) != len(image)):
-            print("Image has size {0}, different from size of input layer: {1}".format(len(self._activation[0]), len(image)))
+        if (self._shape[0] != len(image)):
+            print("Image has size {0}, different from size of input layer: {1}".format(self._shape[0], len(image)))
             return None
-
-        # mat() is deprecating soon
-        # Need to tranform this to ndarray
-        self._input[0]      = numpy.mat(image)
+        
+        # Feed the first layer with the image
+        self._input[0]      = numpy.array(image)
         self._activation[0] = self._sigmoid(self._input[0])
 
-        for layer in range(len(self._activation)-1):
-            self._input[layer+1]        =   numpy.dot(self._activation[layer],  self._weights[layer]) + self._biases[layer+1]
+        # Calculate activations, layer by layer
+        for layer in range(len(self._shape)-1):
+            self._input[layer+1]        =   (self._weights[layer] @ self._activation[layer]) + self._biases[layer+1]
             self._activation[layer+1]   =   self._sigmoid(self._input[layer+1])
 
 
-    def back_propagate(data, learning_rate):
+    def back_propagate(self, data, learning_rate):
             # These matrices are the total changes we need to apply to our current weights and biases
-            nabla_b = [numpy.array([0 for i in range(network_shape[layer])]) for layer in range(len(network_shape))]
-            nabla_w = [numpy.array([[0 for n2 in range(network_shape[L+1])] 
-                                                       for n1 in range(network_shape[L])])
-                                                            for L in range(len(network_shape)-1)]
+            nabla_b = [numpy.zeros([self._shape[i]]) for i in range(len(self._shape))]
+            nabla_w = [numpy.zeros([self._shape[L+1], self._shape[L]]) for L in range(len(self._shape)-1)]
 
-            temp_nabla_b = nabla_b
+            # This matrix holds the changes learned in one image
             # We'll calculate temp_nabla_w on the way, so no need to hold a whole variable for it
+            temp_nabla_b = copy.deepcopy(nabla_b)
+
             # Start learning
-            for i in data:
-                self.feed_forward(data[0])
+            for d in data:
+                self.feed_forward(d[0])
                 
-                # Calculate the intermediate value dC/dz of the last layer:
-                # dC/dz = C'(a).sigmoid'(z)
-                # (quick reminder: dC/dB = dC/dz)
+                # Calculate the intermediate value dC/dz of the last layer: 
+                # (quick reminder: dC/dB = dC/dz. So only dC/dB is done)
                 # (See http://neuralnetworksanddeeplearning.com/chap2.html for more details)
-                temp_nabla_b[-1] = self._dcost(self._activation[-1], data[1]) * self._dsigmoid(self._input[-1])
+                # dC/dB (= dC/dz) = C'(a).sigmoid'(z)
+                temp_nabla_b[-1] = self._dcost(self._activation[-1], d[1]) * self._dsigmoid(self._input[-1])
 
                 # Backpropagate to all other layers
-                for Layer in range(self._layers-1, -1, -1):
+                for Layer in range(len(self._shape)-2, -1, -1):
                     # Second backpropagation equation:
-                    # S_L = (wT . sigmoid'(z)) o S_L+1
+                    # S_L = (w(L+1)T . S_L+1) o sigmoid(L+1)'(z)
                     # (reminder, again: dC/dB = S_L)
-                    temp_nabla_b[Layer] = numpy.dot(numpy.transpose(self._weights[Layer]), self._dsigmoid(self._input[Layer])) * temp_nabla_b[Layer+1]
+                    # numpy.multiply() does element-wise (i.e. Hadamard). numpy.dot() does normal matrix multiplication.
+                    # print("Layer {0} shape:\n {1}\n".format(Layer+1, numpy.transpose(self._input[Layer+1]).shape))
+                    temp_nabla_b[Layer] = numpy.multiply(numpy.transpose(self._weights[Layer]) @ temp_nabla_b[Layer+1], self._dsigmoid(self._input[Layer]))
 
                 # Back propagation finishes.
+                # Third equation
                 # Add the result to our nablas
-                for Layer in range(self._layers):
+                for Layer in range(len(self._shape)):
                     nabla_b[Layer] += temp_nabla_b[Layer]
 
-                for Layer in range(1, self._layers):
-                    nabla_w[Layer] +=  self._activation[Layer-1] * temp_nabla_w[Layer]
+                # Fourth equation:
+                # dC/dWjk = a(L-1)k * S(L)j
+                for Layer in range(len(nabla_w)):
+                #   print("Weight layer {0} shape: {1}".format(Layer, nabla_w[Layer].shape))
+                #    print(nabla_w[Layer])
+                    for To in range(self._shape[Layer+1]):
+                        for From in range(self._shape[Layer]):
+                #            print("To: {0}\t\tFrom: {1}".format(To, From))
+                            nabla_w[Layer][To][From] += temp_nabla_b[Layer+1][To] * self._activation[Layer][From] 
 
             # Now, from the nablas, we adjust the network
-            for i in range(self._layers-1):
+            for i in range(len(self._shape)-1):
                 self._weights[i] -= learning_rate * nabla_w[i]
 
-            for i in range(self._layers):
+            for i in range(len(self._shape)):
                 self._biases[i] -= learning_rate * nabla_b[i]
 
 
 
-    def learn(self, data, learning_rate, batch_size=None):
+    def learn(self, data, learning_rate, batch_size=None, progress_report=False):
         """learn(self, data, learning_rate, batch_size)
             
             data: an array of tuples in the form of (image, label),
@@ -171,29 +176,50 @@ class Network:
             learning_rate: A positive float number. You decide! I'd suggest 1.0 for the first run
 
             batch_size: If supplied, divide the data into batches of this size (with at most 1 batch in range (batch_size, 2*batch_size))
-                        else, it'll just shove all the data into one learning"""
+                        else, it'll just shove all the data into one learning
+
+            progress_report: Report % progress after every finished batch"""
 
         if batch_size is not None:
             # Using stochastic gradient descent method
             if (batch_size < 1):
                 print("You're kidding, right? How am I supposed to divide into batches of size " + str(batch_size) + "?")
+                return None
+
+            print("Start learning")
             random.shuffle(data)
 
             # I come from C++, so please pardon my wariness with python memory allocation
             for i in range(len(data) // batch_size - 1):
                 self.learn(data[i*batch_size : (i+1)*batch_size], learning_rate)
-            self.learn(data[(len(data) // batch_size) * batch_size:], learning_rate)
+                if progress_report:
+                    print("Progress: {0}%".format(i*batch_size/len(data)*100)) 
+                    print("Cost function: {0}".format(self._cost(self._activation[-1], data[(i+1)*batch_size-1][1])))
 
-        # Learning implementation here
+            self.learn(data[(len(data) // batch_size) * batch_size:], learning_rate)
+            print("Learning completed.")
+
         else:
             self.back_propagate(data, learning_rate)
 
+    def guess_this_digit(self, image, acceptance_threshold=0.9):
+        self.feed_forward(image)
+        answer = []
+        for i in range(10):
+            if self._activation[-1][i] >= acceptance_threshold:
+                answer += [i]
 
+        if len(answer) == 1:
+            return i
+        else:
+            return None
 
+    def test_against(self, data, acceptance_threshold=0.9):
+        correct_answers = 0
+        total_tests     = len(data)
+        for d in data:
+            ans = self.guess_this_digit(d[0])
+            if ans is not None and d[1][ans] >= 0.9:
+                ++correct_answers
 
-        
-
-
-# These lines are for debugging purpose only
-# print(quadratic_cost_function(numpy.array([1, 2, 3, 4]) , numpy.array([0, 1, 2, 3])))
-# print(sigmoid_deriv(numpy.array([1,2,3,4])))
+        print("% accuracy over {0} images: {1}".format(total_tests, correct_answers / total_tests))

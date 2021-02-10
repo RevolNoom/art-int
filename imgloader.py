@@ -1,6 +1,6 @@
 import numpy
 
-def load_data(images_filename, labels_filename):
+def load_data(images_filename, labels_filename, maximum_amount = None):
     """ 
         SYNOPSIS: (for MNIST dataset files only)
             load_data(images_filename, labels_filename)
@@ -47,6 +47,9 @@ def load_data(images_filename, labels_filename):
     # Output results here:
     data = []
     
+    if maximum_amount is not None:
+        number_of_imgs = min(maximum_amount, number_of_imgs)
+
     # Getting the images and label
     for i in range(number_of_imgs):
         image = [int.from_bytes(images_file.read(1), "big", signed = False) for i in range(rows*cols)]
@@ -59,6 +62,9 @@ def load_data(images_filename, labels_filename):
         label[temp_label] = 1.0
 
         data.append((image, label))
+
+    images_file.close()
+    labels_file.close()
 
     return data
 
