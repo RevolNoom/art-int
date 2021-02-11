@@ -1,4 +1,5 @@
 import numpy
+import math
 import copy
 import random
 
@@ -11,7 +12,7 @@ def quadratic(final_layer_activation, desired_output):
         Takes two numpy arrays argument of same size
         Return the sum of all element-wise (f_l_a - d_o)^2"""
     y = final_layer_activation - desired_output
-    return y @ y
+    return numpy.dot(y, y)
 
 def quadratic_deriv(final_layer_activation, desired_output):
     """ quadratic_deriv(final_layer_activation, desired_output):
@@ -78,7 +79,6 @@ class Network:
         self._weights= [numpy.random.randn(self._shape[layer+1], self._shape[layer])
                                                             for layer in range(len(self._shape)-1)]
 
-
         
         # The neurons input & activation from the last image feeding
         # Used for learning and accuracy-testing processes
@@ -103,8 +103,9 @@ class Network:
             return None
         
         # Feed the first layer with the image
-        self._input[0]      = numpy.array(image)
-        self._activation[0] = self._sigmoid(self._input[0])
+        # self._input[0]      = numpy.array(image) / 255
+        self._activation[0] = numpy.array(image) / 255
+        #self._sigmoid(self._input[0])
 
         # Calculate activations, layer by layer
         for layer in range(len(self._shape)-1):
@@ -113,55 +114,62 @@ class Network:
 
 
     def back_propagate(self, data, learning_rate):
-            # These matrices are the total changes we need to apply to our current weights and biases
-            nabla_b = [numpy.zeros([self._shape[i]]) for i in range(len(self._shape))]
-            nabla_w = [numpy.zeros([self._shape[L+1], self._shape[L]]) for L in range(len(self._shape)-1)]
 
-            # This matrix holds the changes learned in one image
-            # We'll calculate temp_nabla_w on the way, so no need to hold a whole variable for it
-            temp_nabla_b = copy.deepcopy(nabla_b)
+        # These matrices are the total changes we need to apply to our current weights and biases
+        nabla_b = [numpy.zeros([self._shape[i]]) for i in range(len(self._shape))]
+        nabla_w = [numpy.zeros([self._shape[L+1], self._shape[L]]) for L in range(len(self._shape)-1)]
 
-            # Start learning
-            for d in data:
-                self.feed_forward(d[0])
-                
-                # Calculate the intermediate value dC/dz of the last layer: 
-                # (quick reminder: dC/dB = dC/dz. So only dC/dB is done)
-                # (See http://neuralnetworksanddeeplearning.com/chap2.html for more details)
-                # dC/dB (= dC/dz) = C'(a).sigmoid'(z)
-                temp_nabla_b[-1] = self._dcost(self._activation[-1], d[1]) * self._dsigmoid(self._input[-1])
+        # This matrix holds the changes learned in one image
+        # temp_nabla_w can be calculated from temp_nabla_b, so no need a whole variable for it
+        temp_nabla_b = copy.deepcopy(nabla_b)
 
-                # Backpropagate to all other layers
-                for Layer in range(len(self._shape)-2, -1, -1):
-                    # Second backpropagation equation:
-                    # S_L = (w(L+1)T . S_L+1) o sigmoid(L+1)'(z)
-                    # (reminder, again: dC/dB = S_L)
-                    # numpy.multiply() does element-wise (i.e. Hadamard). numpy.dot() does normal matrix multiplication.
-                    # print("Layer {0} shape:\n {1}\n".format(Layer+1, numpy.transpose(self._input[Layer+1]).shape))
-                    temp_nabla_b[Layer] = numpy.multiply(numpy.transpose(self._weights[Layer]) @ temp_nabla_b[Layer+1], self._dsigmoid(self._input[Layer]))
 
-                # Back propagation finishes.
-                # Third equation
-                # Add the result to our nablas
-                for Layer in range(len(self._shape)):
-                    nabla_b[Layer] += temp_nabla_b[Layer]
+        # Start learning
+        for d in data:
+            
+            self.feed_forward(d[0])
+            
+            # Calculate the intermediate value dC/dz of the last layer: 
+            # (quick reminder: dC/dB = dC/dz. So only dC/dB is done)
+            # (See http://neuralnetworksanddeeplearning.com/chap2.html for more details)
+            # dC/dB (= dC/dz) = C'(a).sigmoid'(z)
+            #temp_nabla_b[-1] = numpy.multiply(self._dcost(self._activation[-1], d[1]), self._dsigmoid(self._input[-1]))
+            #print("Sigmoid: " + str( self._dsigmoid(self._input[-1])))
+            temp_nabla_b[-1] = self._dcost(self._activation[-1], d[1]) * self._dsigmoid(self._input[-1])
 
-                # Fourth equation:
-                # dC/dWjk = a(L-1)k * S(L)j
-                for Layer in range(len(nabla_w)):
-                #   print("Weight layer {0} shape: {1}".format(Layer, nabla_w[Layer].shape))
-                #    print(nabla_w[Layer])
-                    for To in range(self._shape[Layer+1]):
-                        for From in range(self._shape[Layer]):
-                #            print("To: {0}\t\tFrom: {1}".format(To, From))
-                            nabla_w[Layer][To][From] += temp_nabla_b[Layer+1][To] * self._activation[Layer][From] 
+            # Backpropagate to all other layers
+            for Layer in range(len(self._shape)-2, -1, -1):
+                # Second backpropagation equation:
+                # S_L = (w(L+1)T . S_L+1) o sigmoid(L+1)'(z)
+                # (reminder, again: dC/dB = S_L)
+                # numpy.multiply() or @ does element-wise (i.e. Hadamard). numpy.dot() does dot product.
+                # print("Layer {0} shape:\n {1}\n".format(Layer+1, numpy.transpose(self._input[Layer+1]).shape))
+                temp_nabla_b[Layer] = numpy.multiply(numpy.dot(numpy.transpose(self._weights[Layer]), temp_nabla_b[Layer+1]), self._dsigmoid(self._input[Layer]))
 
-            # Now, from the nablas, we adjust the network
-            for i in range(len(self._shape)-1):
-                self._weights[i] -= learning_rate * nabla_w[i]
+                #print("temp nabla shape: " + str(temp_nabla_b[Layer].shape))
+                #print(temp_nabla_b[Layer])
+                #print("")
 
-            for i in range(len(self._shape)):
-                self._biases[i] -= learning_rate * nabla_b[i]
+            # Back propagation finishes.
+            # Third equation
+            # Add the result to our nablas
+            for Layer in range(len(self._shape)):
+                nabla_b[Layer] += temp_nabla_b[Layer]
+
+
+            # Fourth equation:
+            # dC/dWjk = a(L-1)k * S(L)j
+            for Layer in range(len(nabla_w)):
+                for To in range(self._shape[Layer+1]):
+                    for From in range(self._shape[Layer]):
+                        nabla_w[Layer][To][From] += temp_nabla_b[Layer+1][To] * self._activation[Layer][From] 
+
+        # Now, from the nablas, we adjust the network
+        for i in range(len(nabla_w)):
+            self._weights[i] -= (learning_rate) * nabla_w[i]
+
+        for i in range(len(self._shape)):
+            self._biases[i] -= (learning_rate) * nabla_b[i]
 
 
 
@@ -191,12 +199,16 @@ class Network:
 
             # I come from C++, so please pardon my wariness with python memory allocation
             for i in range(len(data) // batch_size - 1):
+                print("Before training:")
+                self.test_against(data)
                 self.learn(data[i*batch_size : (i+1)*batch_size], learning_rate)
                 if progress_report:
                     print("Progress: {0}%".format(i*batch_size/len(data)*100)) 
-                    print("Cost function: {0}".format(self._cost(self._activation[-1], data[(i+1)*batch_size-1][1])))
+                    print("Cost function of the last image: {0}".format(self._cost(self._activation[-1], data[(i+1)*batch_size-1][1])))
+                print("After training:")
+                self.test_against(data)
 
-            self.learn(data[(len(data) // batch_size) * batch_size:], learning_rate)
+            self.learn(data[(len(data) // batch_size -1) * batch_size:], learning_rate)
             print("Learning completed.")
 
         else:
@@ -204,21 +216,33 @@ class Network:
 
     def guess_this_digit(self, image, acceptance_threshold=0.9):
         self.feed_forward(image)
-        answer = []
-        for i in range(10):
-            if self._activation[-1][i] >= acceptance_threshold:
-                answer += [i]
+        answer = self._activation[-1]
 
-        if len(answer) == 1:
+        """for i in range(10):
+            if self._activation[-1][i] >= acceptance_threshold:
+                answer[i] = 1.0 
+        return answer
+
+        #if len(answer) == 1:
+        if np.argmax(i)
             return i
         else:
             return None
+            """
+
+        return numpy.argmax(answer)
 
     def test_against(self, data, acceptance_threshold=0.9):
         correct_answers = 0
         total_tests     = len(data)
         for d in data:
             ans = self.guess_this_digit(d[0])
+            """
+            print("Comparing answers:\n{0}".format(d[1]))
+            print(["{:4.2f}".format(i) for i in ans])
+            ans = [ ans[i] - d[1][i] for i in range(len(ans))]
+            if len([i for i in ans if i>0.2]) < 1:
+            """
             if ans is not None and d[1][ans] >= 0.9:
                 ++correct_answers
 
