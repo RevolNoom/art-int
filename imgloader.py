@@ -7,13 +7,17 @@ def load_data(images_filename, labels_filename, maximum_amount = None):
 
         Return array "data" of tuples with 2 entries:
             data[x][0]: 
-                +) A 28x28 image in form of an array with 784 integers
+                +) A 28x28 image in form of an 1x784 matrix (No, NOT an 1-D array)
                 +) Oriented row-wise, which mean, data[x][0] to data[x][rows-1] are of the first row
+                +) data[x][0][i] has the form [j], a list holds a single integer
             data[x][1]:
                 +) Label of image x
-                +) An array with length 10
-                +) If data[x][1][i] = 1.0, then data[x] is digit "i"
-                +) Otherwise, data[x][1][i] = 0.0
+                +) A 1x10 matrix (same form like the image) 
+                +) If data[x][1][i] = [1.0], then data[x] is digit "i"
+                +) Otherwise, data[x][1][i] = [0.0]
+
+        Am I insane? Why aren't they 1-D array but a 1x'something' matrix? 
+        Because, numpy.dot() has a pretty neat trick, which is utilized in calculating the changes in weights
     """
 
     # "rb" = Read file in Binary mode
@@ -52,14 +56,14 @@ def load_data(images_filename, labels_filename, maximum_amount = None):
 
     # Getting the images and label
     for i in range(number_of_imgs):
-        image = [int.from_bytes(images_file.read(1), "big", signed = False) for i in range(rows*cols)]
+        image = [[int.from_bytes(images_file.read(1), "big", signed = False)] for i in range(rows*cols)]
         temp_label = int.from_bytes(labels_file.read(1), "big", signed = False)
         if temp_label not in range(10):
             print("Woa woa hey hey is " + str(temp_label) + " a new kind of digit?")
             return []
         # Label is an array with 10 slots, each corresponding to one of 0 - 9
-        label = [0.0 for i in range(10)]
-        label[temp_label] = 1.0
+        label = [[0.0] for i in range(10)]
+        label[temp_label][0] = 1.0
 
         data.append((image, label))
 
@@ -68,5 +72,3 @@ def load_data(images_filename, labels_filename, maximum_amount = None):
 
     return data
 
-# This line is for debugging purpose
-# load_data("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte")
