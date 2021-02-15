@@ -5,7 +5,7 @@ def load_data(images_filename, labels_filename, maximum_amount = None):
         SYNOPSIS: (for MNIST dataset files only)
             load_data(images_filename, labels_filename)
 
-        Return array "data" of tuples with 2 entries:
+        Return array "data" of tuples with 2 entries, each entry is a numpy array:
             data[x][0]: 
                 +) A 28x28 image in form of an 1x784 matrix (No, NOT an 1-D array)
                 +) Oriented row-wise, which mean, data[x][0] to data[x][rows-1] are of the first row
@@ -56,13 +56,13 @@ def load_data(images_filename, labels_filename, maximum_amount = None):
 
     # Getting the images and label
     for i in range(number_of_imgs):
-        image = [[int.from_bytes(images_file.read(1), "big", signed = False)] for i in range(rows*cols)]
+        image = numpy.array([[int.from_bytes(images_file.read(1), "big", signed = False)] for i in range(rows*cols)])
         temp_label = int.from_bytes(labels_file.read(1), "big", signed = False)
         if temp_label not in range(10):
             print("Woa woa hey hey is " + str(temp_label) + " a new kind of digit?")
             return []
         # Label is an array with 10 slots, each corresponding to one of 0 - 9
-        label = [[0.0] for i in range(10)]
+        label = numpy.zeros([10, 1])
         label[temp_label][0] = 1.0
 
         data.append((image, label))
